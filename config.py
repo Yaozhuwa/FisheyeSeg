@@ -1,13 +1,13 @@
 
 
 class DefaultConfig(object):
-    train_img_dir = 'E:\\DataSets\\CityScape\\train'
-    train_annot_dir = 'E:\\DataSets\\CityScape\\trainannot'
-    valid_img_dir='E:\\DataSets\\CityScape\\val_350f'
-    valid_annot_dir='E:\\DataSets\\CityScape\\val_350f_annot'
+    train_img_dir = 'DataSets\\CityScape\\train'
+    train_annot_dir = 'DataSets\\CityScape\\trainannot'
+    valid_img_dir='DataSets\\CityScape\\val_350f'
+    valid_annot_dir='DataSets\\CityScape\\val_350f_annot'
 
     train_with_ckpt = False
-    logdir = "checkpoints/ckpt_weight"
+    logdir = "checkpoints/ckpt__focalloss_weight"
     ckpt_name = "checkpoints/ckpt__focalloss_weight/ckpt_test"
     ckpt_path = "checkpoints/ckpt_test_7.pth"
 
