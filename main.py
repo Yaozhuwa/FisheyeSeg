@@ -17,7 +17,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torchvision
 import os
 import sys
-from loss import FocalLoss2d
+from loss import FocalLoss2d, CrossEntropyLoss2d
 
 
 def get_default_device():
@@ -191,7 +191,7 @@ def train():
        8.439253 , 8.316548 , 8.129169 , 4.312109 , 8.170293 , 6.91469  ,
        8.135018 , 0.  ,3.6]).cuda()
 
-    # criterion = nn.CrossEntropyLoss(weight=class_weights)
+    # criterion = CrossEntropyLoss2d(weight=class_weights)
     criterion = FocalLoss2d(weight=class_weights)
 
     lr = Config.learning_rate
@@ -202,7 +202,7 @@ def train():
                                  weight_decay=2e-4)
 
     scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer, step_size=80, gamma=0.1)
+        optimizer, step_size=90, gamma=0.1)
 
     start_epoch = 0
     step_per_epoch = math.ceil(2975 / Config.batch_size)
