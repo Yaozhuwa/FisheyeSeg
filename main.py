@@ -41,6 +41,13 @@ class MyTransform(object):
         self._EXT_PARAM_RANGE = [5, 5, 10, 0.3, 0.3, 0.4]
         self._transformer.set_ext_param_range(self._EXT_PARAM_RANGE)
 
+        self._RAND_CROP = False
+        self._rand_crop_rate = 0.8
+
+    def set_crop(self,rand=True, rate=0.8):
+        self._RAND_CROP = rand
+        self._rand_crop_rate = rate
+
     def set_bkg(self, bkg_label=20, bkg_color=[0, 0, 0]):
         self._transformer.set_bkg(bkg_label, bkg_color)
 
@@ -63,7 +70,23 @@ class MyTransform(object):
         self._F_RANGE = f_range
         self._F_RAND_FLAG = True
 
+    def _rand_crop(self, image, annot):
+        rows, cols, channels = image.shape
+
+        new_rows = math.floor(rows*self._rand_crop_rate)
+        new_cols = math.floor(cols*self._rand_crop_rate)
+
+        row_start = math.floor((rows-new_rows)*random.random())
+        col_start = math.floor((cols-new_cols)*random.random())
+
+        crop_image = image[row_start:row_start+new_rows, col_start:col_start+new_cols]
+        crop_annot = annot[row_start:row_start+new_rows, col_start:col_start+new_cols]
+
+        return crop_image, crop_annot
+
     def __call__(self, image, annot):
+        if self._RAND_CROP:
+            image, annot = self._rand_crop(image, annot)
         if self._F_RAND_FLAG:
             self._transformer.rand_f(self._F_RANGE)
         if self._EXT_RAND_FLAG:
@@ -183,6 +206,7 @@ def train():
     train_transform.set_ext_param_range([0, 0, 0, 0.3, 0.3, 0.4])
     train_transform.rand_ext_params()
     train_transform.set_bkg(bkg_label=20, bkg_color=[0, 0, 0])
+    train_transform.set_crop(rand=True, rate=0.8)
 
     train_set = CityScape(Config.train_img_dir,
                           Config.train_annot_dir, transform=train_transform)
