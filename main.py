@@ -166,6 +166,16 @@ def val(model, dataloader, ignore_index=19, is_print=False):
 
     return mean_precision, mean_recall, mean_iou, m_precision_19, m_racall_19, m_iou_19
 
+def final_validation():
+    validation_set = CityScape(Config.valid_img_dir, Config.valid_annot_dir)
+    validation_loader = DataLoader(
+        validation_set, batch_size=Config.val_batch_size, shuffle=False)
+    model = ERFPSPNet(shapeHW=[640, 640], num_classes=21)
+    model.to(MyDevice)
+    checkpoint = torch.load(Config.ckpt_path)
+    print("Load",Config.ckpt_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    val(model, validation_loader, is_print=True)
 
 def train():
     train_transform = MyTransform(350, [640, 640])
@@ -213,14 +223,18 @@ def train():
         checkpoint = torch.load(Config.ckpt_path)
         print("Load",Config.ckpt_path)
         model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch']+1
+        val(model, validation_loader, is_print=True)
         # loss = checkpoint['loss']
         model.train()
 
+    start_time = None
     for epoch in range(start_epoch, Config.max_epoch):
 
         for i, (image, annot) in enumerate(train_loader):
-            start_time = time.time()
+            if start_time is None:
+                start_time = time.time()
             input = image.to(MyDevice)
             target = annot.to(MyDevice, dtype=torch.long)
             model.train()
@@ -243,11 +257,12 @@ def train():
                 writer.add_scalar("Monitor/Loss", loss.item(), global_step=global_step)
 
             time_elapsed = time.time() - start_time
+            start_time = time.time()
             print(f"{epoch}/{Config.max_epoch-1} epoch, {i}/{step_per_epoch} step, loss:{loss.item()}, "
                   f"{time_elapsed} sec/step; global step={global_step}")
 
         scheduler.step()
-        if epoch > 40:
+        if epoch > 30:
             mean_precision, mean_recall, mean_iou, m_precision_19, m_racall_19, m_iou_19 = val(
                 model, validation_loader, is_print=True)
             
@@ -262,7 +277,8 @@ def train():
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
-                'loss': loss.item()
+                'loss': loss.item(),
+                'optimizer_state_dict': optimizer.state_dict()
             }, Config.ckpt_name + "_" + str(epoch) + ".pth")
             print("model saved!")
 
@@ -270,6 +286,7 @@ def train():
     torch.save({
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss
     }, "checkpoints/final_focalloss_model.pth")
     print("Save model to disk!")

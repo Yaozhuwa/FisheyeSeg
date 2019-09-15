@@ -1,16 +1,6 @@
-class Foo(object):
-    def __init__(self):
-        self.name = self.__class__.__name__
+x = [['1','1'],['2','2']]
+def f(x):
+    return list(map(float,x))
 
-
-    def cout(self):
-        print(self.name)
-
-
-
-class Bar(Foo):
-    pass
-
-
-b = Bar()
-b.cout()
+print(list(map(f,x)))
+# print(float(x))

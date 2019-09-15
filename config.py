@@ -9,7 +9,7 @@ class DefaultConfig(object):
     train_with_ckpt = False
     logdir = "checkpoints/ckpt__focalloss_weight"
     ckpt_name = "checkpoints/ckpt__focalloss_weight/ckpt_test"
-    ckpt_path = "checkpoints/ckpt_test_7.pth"
+    ckpt_path = "checkpoints/ckpt__focalloss_weight/ckpt_test_168.pth"
 
     batch_size = 8
     val_batch_size = 25
