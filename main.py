@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from torch import nn
 from config import DefaultConfig
 from models.ERFPSPNet import ERFPSPNet
+from models.SwiftNet import SwiftNet, resnet18
 import torch.nn.functional as F
 from torch import nn
 import math
@@ -217,7 +218,9 @@ def train():
     validation_loader = DataLoader(
         validation_set, batch_size=Config.val_batch_size, shuffle=False)
 
-    model = ERFPSPNet(shapeHW=[640, 640], num_classes=21)
+    # model = ERFPSPNet(shapeHW=[640, 640], num_classes=21)
+    resnet = resnet18(pretrained=True)
+    model = SwiftNet(resnet, num_classes=21)
     model.to(MyDevice)
 
     class_weights = torch.tensor([8.6979065, 8.497886 , 8.741297 , 5.983605 , 8.662319 , 8.681756 ,
@@ -229,14 +232,24 @@ def train():
     criterion = FocalLoss2d(weight=class_weights)
 
     lr = Config.learning_rate
-    optimizer = torch.optim.Adam(model.parameters(),
-                                 lr=1e-3,
-                                 betas=(0.9, 0.999),
-                                 eps=1e-08,
-                                 weight_decay=2e-4)
 
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer, step_size=90, gamma=0.1)
+    # Pretrained SwiftNet optimizer
+    optimizer = torch.optim.Adam([{'params':model.random_init_params()},
+                                  {'params':model.fine_tune_params(), 'lr':1e-4, 'weight_decay':2.5e-5}],
+                                 lr=4e-4,
+                                 weight_decay=1e-4)
+
+    # ERFNetPSP optimizer
+    # optimizer = torch.optim.Adam(model.parameters(),
+    #                              lr=1e-3,
+    #                              betas=(0.9, 0.999),
+    #                              eps=1e-08,
+    #                              weight_decay=2e-4)
+
+    # scheduler = torch.optim.lr_scheduler.StepLR(
+    #     optimizer, step_size=90, gamma=0.1)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 200, 1e-6)
 
     start_epoch = 0
     step_per_epoch = math.ceil(2975 / Config.batch_size)
@@ -286,7 +299,7 @@ def train():
                   f"{time_elapsed} sec/step; global step={global_step}")
 
         scheduler.step()
-        if epoch > 30:
+        if epoch > 20:
             mean_precision, mean_recall, mean_iou, m_precision_19, m_racall_19, m_iou_19 = val(
                 model, validation_loader, is_print=True)
             
