@@ -35,3 +35,4 @@ class FocalLoss2d(nn.Module):
         log_softmax_input = torch.log(softmax_input)
         return F.nll_loss(torch.pow(1-softmax_input, self.gamma)*log_softmax_input, targets,
                           weight=self.weight,ignore_index=self.ignore_index, reduction='mean')
+

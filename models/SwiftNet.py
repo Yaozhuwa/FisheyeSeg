@@ -297,7 +297,7 @@ class SwiftNet(nn.Module):
         self.logits = _BNReluConv(self.backbone.out_feature_channels, self.num_classes, batch_norm=True)
 
     def forward(self, images):
-        image_size = [640,640]
+        image_size = list(images.shape)[2:]
         featrues = self.backbone(images)
         logits = self.logits.forward(featrues)
         return upsample(logits, image_size)

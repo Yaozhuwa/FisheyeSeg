@@ -39,7 +39,7 @@ class MyTransform(object):
         self._F_RANGE = [200, 400]
 
         self._EXT_RAND_FLAG = False
-        self._EXT_PARAM_RANGE = [5, 5, 10, 0.3, 0.3, 0.4]
+        self._EXT_PARAM_RANGE = [0, 0, 0, 0, 0, 0]
         self._transformer.set_ext_param_range(self._EXT_PARAM_RANGE)
 
         self._RAND_CROP = False
@@ -190,24 +190,34 @@ def val(model, dataloader, ignore_index=19, is_print=False):
 
     return mean_precision, mean_recall, mean_iou, m_precision_19, m_racall_19, m_iou_19
 
-def final_validation():
-    validation_set = CityScape(Config.valid_img_dir, Config.valid_annot_dir)
-    validation_loader = DataLoader(
-        validation_set, batch_size=Config.val_batch_size, shuffle=False)
-    model = ERFPSPNet(shapeHW=[640, 640], num_classes=21)
+def final_eval():
+    valid_path = ['\\val_200f','\\val_250f','\\val_300f','\\val_350f','\\val_400f']
+    valid_annot = [x+'_annot' for x in valid_path]
+    # model = ERFPSPNet(shapeHW=[640, 640], num_classes=21)
+    resnet = resnet18(pretrained=True)
+    model = SwiftNet(resnet, num_classes=21)
     model.to(MyDevice)
     checkpoint = torch.load(Config.ckpt_path)
     print("Load",Config.ckpt_path)
     model.load_state_dict(checkpoint['model_state_dict'])
-    val(model, validation_loader, is_print=True)
+    for i in range(len(valid_path)):
+        validation_set = CityScape(Config.data_dir+valid_path[i], Config.data_dir+valid_annot[i])
+        validation_loader = DataLoader(
+            validation_set, batch_size=Config.val_batch_size, shuffle=False)
+        print('\n',valid_path[i])
+        val(model, validation_loader, is_print=True)
+
 
 def train():
-    train_transform = MyTransform(350, [640, 640])
-    train_transform.rand_f([200, 400])
-    train_transform.set_ext_param_range([0, 0, 0, 0.3, 0.3, 0.4])
-    train_transform.rand_ext_params()
+    train_transform = MyTransform(Config.f, Config.fish_size)
+    train_transform.set_ext_params(Config.ext_param)
+    train_transform.set_ext_param_range(Config.ext_range)
+    if Config.rand_f:
+        train_transform.rand_f(f_range=Config.f_range)
+    if Config.rand_ext:
+        train_transform.rand_ext_params()
     train_transform.set_bkg(bkg_label=20, bkg_color=[0, 0, 0])
-    train_transform.set_crop(rand=True, rate=0.8)
+    train_transform.set_crop(rand=Config.crop, rate=Config.crop_rate)
 
     train_set = CityScape(Config.train_img_dir,
                           Config.train_annot_dir, transform=train_transform)
@@ -325,10 +335,10 @@ def train():
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss
-    }, "checkpoints/final_focalloss_model.pth")
+    }, Config.model_path)
     print("Save model to disk!")
     writer.close()
 
 
 if __name__ == '__main__':
-    train()
+    final_eval()

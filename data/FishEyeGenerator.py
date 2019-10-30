@@ -3,6 +3,7 @@ import cv2
 from math import pi, cos, sin, tan, atan, sqrt, ceil, floor
 import time
 import random
+import sys
 
 
 class FishEyeGenerator:
@@ -30,6 +31,8 @@ class FishEyeGenerator:
 
         self._bkg_color = [0, 0 ,0]
         self._bkg_label = 20
+
+        
 
     def set_bkg(self, bkg_label=20, bkg_color=[0,0,0]):
         self._bkg_color = list(bkg_color)
@@ -244,27 +247,29 @@ class FishEyeGenerator:
 
 
 def test_color():
-    trans = FishEyeGenerator(350, [640,640])
-    img = cv2.imread("train.png")
-    im_annot = cv2.imread("annot.png", 0)
-    trans.rand_ext_params()
+    trans = FishEyeGenerator(500, [640,640])
+    img = cv2.imread("F:/Code/Github/FisheyeSeg/data/stand2.jpg")
+    # im_annot = cv2.imread("F:/Code/Github/FisheyeSeg/annot.png", 0)
+    img = cv2.resize(img,None,fx=0.25, fy=0.25)
+    trans.set_ext_params([0, 0, 0, 0, 0, 0])
+    # trans.rand_ext_params()
     trans.print_ext_param()
     s = time.time()
     dst = trans.transFromColor(img)
-    dst2 = trans.transFromGray(im_annot,reuse=True)
+    # dst2 = trans.transFromGray(im_annot,reuse=True)
     e=time.time()
     print(e-s)
 
-    img = cv2.resize(img,None,fx=0.5, fy=0.5)
+    
     cv2.imshow("src", img)
     cv2.imshow("dst",dst)
-    cv2.imshow("dst2",dst2*10)
+    # cv2.imshow("dst2",dst2*10)
 
     cv2.waitKey(0)
 
 
 def test_gray():
-    trans = FishEyeGenerator(350, [640, 640])
+    trans = FishEyeGenerator(800, [640, 640])
     img = cv2.imread("aachen_annot.png",0)
     trans.rand_ext_params()
     # trans.set_ext_params(*([0]*6))
@@ -277,8 +282,11 @@ def test_gray():
     cv2.imshow("dst",dst)
 
     cv2.waitKey(0)
+    
 if __name__ =='__main__':
+    # param = sys.argv[1]
+    # param = float(param)
+    # param = 0.4
     test_color()
-    # test_gray()
 
 
