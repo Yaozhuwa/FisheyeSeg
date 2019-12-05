@@ -19,7 +19,7 @@ import torchvision
 import os
 import sys
 from loss import FocalLoss2d, CrossEntropyLoss2d
-
+import cv2
 
 def get_default_device():
     if torch.cuda.is_available():
@@ -44,6 +44,11 @@ class MyTransform(object):
 
         self._RAND_CROP = False
         self._rand_crop_rate = 0.8
+
+        self._NORMAL_SCALE = True
+        self._scale_range = [0.5, 2]
+        self._NORMAL_TRANSLATE = True
+        self._trans_range = [-20,20]
 
     def set_crop(self,rand=True, rate=0.8):
         self._RAND_CROP = rand
@@ -88,12 +93,24 @@ class MyTransform(object):
     def __call__(self, image, annot):
         if self._RAND_CROP:
             image, annot = self._rand_crop(image, annot)
+            if self._NORMAL_SCALE:
+                scale_rate = random.random()*(self._scale_range[1]-self._scale_range[0])+self._scale_range[0]
+                image = cv2.resize(image, None, fx=scale_rate, fy=scale_rate, interpolation=cv2.INTER_CUBIC)
+                annot = cv2.resize(annot, None, fx=scale_rate, fy=scale_rate, interpolation=cv2.INTER_NEAREST)
         if self._F_RAND_FLAG:
             self._transformer.rand_f(self._F_RANGE)
         if self._EXT_RAND_FLAG:
             self._transformer.rand_ext_params()
         dst_image = self._transformer.transFromColor(image)
         dst_annot = self._transformer.transFromGray(annot, reuse=True)
+
+        if self._NORMAL_TRANSLATE:
+            x_shift = random.random()*(self._trans_range[1]-self._trans_range[0])+self._trans_range[0]
+            y_shift = random.random()*(self._trans_range[1]-self._trans_range[0])+self._trans_range[0]
+            M=np.array([[1,0, x_shift],[0,1,y_shift]], dtype=np.float32)
+            sz = (dst_annot.shape[1], dst_annot.shape[0])
+            dst_image = cv2.warpAffine(dst_image, M, sz)
+            dst_annot = cv2.warpAffine(dst_annot, M, sz, flags=cv2.INTER_NEAREST, borderValue=20)
 
         dst_image = Image.fromarray(dst_image)
         dst_annot = Image.fromarray(dst_annot)
@@ -190,8 +207,98 @@ def val(model, dataloader, ignore_index=19, is_print=False):
 
     return mean_precision, mean_recall, mean_iou, m_precision_19, m_racall_19, m_iou_19
 
+def val_distortion(model, dataloader, ignore_index=19, is_print=False):
+    start_time = time.time()
+    model.to(MyDevice)
+    model.eval()
+    precision_list = np.zeros(Config.class_num, dtype=np.float)
+    recall_list = np.zeros(Config.class_num, dtype=np.float)
+    iou_list = np.zeros(Config.class_num, dtype=np.float)
+
+    pix_num_or = np.zeros(Config.class_num, dtype=np.float)
+    pix_num_and = np.zeros(Config.class_num, dtype=np.float)
+    pix_num_TPFP = np.zeros(Config.class_num, dtype=np.float)
+    pix_num_TPFN = np.zeros(Config.class_num, dtype=np.float)
+    val_iter_num = math.ceil(500 / Config.val_batch_size)
+
+    mask_distortion = torch.ones(Config.fish_size, device=MyDevice)
+    for i in range(Config.fish_size[0]):
+        for j in range(Config.fish_size[1]):
+            if (i-Config.fish_size[0]/2)**2+(j-Config.fish_size[1]/2)**2 < Config.mask_radius**2:
+                mask_distortion[i,j]=0
+    with torch.no_grad():
+        for i, (image, annot) in enumerate(dataloader):
+            tic = time.time()
+            input = image.to(MyDevice)
+            target = annot.to(MyDevice, dtype=torch.long)
+            # batch_size*1*H*W
+            predict = torch.argmax(model(input), 1, keepdim=True)
+            predict_onehot = torch.zeros(predict.size(
+                0), Config.class_num, predict.size(2), predict.size(3)).cuda()
+            predict_onehot = predict_onehot.scatter(1, predict, 1).float()
+            target.unsqueeze_(1)
+            target_onehot = torch.zeros(target.size(
+                0), Config.class_num, target.size(2), target.size(3)).cuda()
+            target_onehot = target_onehot.scatter(1, target, 1).float()
+
+            mask = (1 - target_onehot[:, ignore_index, :, :]). \
+                view(target.size(0), 1, target.size(2), target.size(3))
+            predict_onehot *= mask
+            predict_onehot *= mask_distortion
+            target_onehot *= mask
+            target_onehot *= mask_distortion
+
+            area_and = predict_onehot * target_onehot
+            area_or = predict_onehot + target_onehot - area_and
+
+            pix_num_TPFP += torch.sum(predict_onehot,
+                                      dim=(0, 2, 3)).cpu().numpy()
+            pix_num_TPFN += torch.sum(target_onehot,
+                                      dim=(0, 2, 3)).cpu().numpy()
+            pix_num_and += torch.sum(area_and, dim=(0, 2, 3)).cpu().numpy()
+            pix_num_or += torch.sum(area_or, dim=(0, 2, 3)).cpu().numpy()
+            toc = time.time()
+
+            print(f"validation step {i}/{val_iter_num-1}, {toc-tic} sec/step ...")
+
+    precision_list = pix_num_and / (pix_num_TPFP + 1e-5)
+    recall_list = pix_num_and / (pix_num_TPFN + 1e-5)
+    iou_list = pix_num_and / (pix_num_or + 1e-5)
+
+    precision_list[ignore_index] = 0
+    recall_list[ignore_index] = 0
+    iou_list[ignore_index] = 0
+
+    mean_precision = np.sum(precision_list) / (Config.class_num - 1)
+    mean_recall = np.sum(recall_list) / (Config.class_num - 1)
+    mean_iou = np.sum(iou_list) / (Config.class_num - 1)
+
+    m_precision_19 = np.sum(precision_list[0:-1]) / (Config.class_num - 2)
+    m_racall_19 = np.sum(recall_list[0:-1]) / (Config.class_num - 2)
+    m_iou_19 = np.sum(iou_list[0:-1]) / (Config.class_num - 2)
+
+    if is_print:
+        print("==================RESULT====================")
+        print("Mean precision:", mean_precision,
+              '; Mean precision 19:', m_precision_19)
+        print("Mean recall:", mean_recall, '; Mean recall 19:', m_racall_19)
+        print("Mean iou:", mean_iou, '; Mean iou 19:', m_iou_19)
+        print("各类精度：")
+        print(precision_list)
+        print("各类召回率：")
+        print(recall_list)
+        print("各类IOU：")
+        print(iou_list)
+        print(time.time()-start_time, "sec/validation")
+        print("===================END======================")
+
+    return mean_precision, mean_recall, mean_iou, m_precision_19, m_racall_19, m_iou_19
+
 def final_eval():
     valid_path = ['\\val_200f','\\val_250f','\\val_300f','\\val_350f','\\val_400f']
+    # valid_path = ['\\val_200f','\\val_250f','\\val_300f','\\val_350f','\\val_400f']
+    # valid_path = ['\\val_rotate10']
+
     valid_annot = [x+'_annot' for x in valid_path]
     # model = ERFPSPNet(shapeHW=[640, 640], num_classes=21)
     resnet = resnet18(pretrained=True)
@@ -200,12 +307,42 @@ def final_eval():
     checkpoint = torch.load(Config.ckpt_path)
     print("Load",Config.ckpt_path)
     model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
     for i in range(len(valid_path)):
         validation_set = CityScape(Config.data_dir+valid_path[i], Config.data_dir+valid_annot[i])
         validation_loader = DataLoader(
             validation_set, batch_size=Config.val_batch_size, shuffle=False)
         print('\n',valid_path[i])
+        val_distortion(model, validation_loader, is_print=True)
+
+def one_eval(model, ckpt_path, valid_path, valid_annot_path, is_distortion=False):
+    model.to(MyDevice)
+    checkpoint = torch.load(ckpt_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    validation_set = CityScape(Config.data_dir+valid_path, Config.data_dir+valid_annot_path)
+    validation_loader = DataLoader(
+        validation_set, batch_size=Config.val_batch_size, shuffle=False)
+    print("ckpt_path", ckpt_path)
+    print("valid_path",valid_path)
+    if is_distortion:
+        val_distortion(model, validation_loader, is_print=True)
+    else:
         val(model, validation_loader, is_print=True)
+
+def all_eval():
+    resnet = resnet18(pretrained=True)
+    model = SwiftNet(resnet, num_classes=21)
+    ckpt_index = [7]
+    # ckpt_index = [1, 4, 5, 6, 8, 9, 10, 11]
+    ckpt = ["checkpoints/CKPT/"+str(x)+'.pth' for x in ckpt_index]
+    valid_path = ['\\val_400f']
+    # valid_path = ['\\val_200f','\\val_250f','\\val_300f','\\val_350f','\\val_400f','\\val_7DOF', '\\val_rotate10']
+    for i in ckpt:
+        for j in valid_path:
+            one_eval(model, i, j, j+"_annot", is_distortion=False)
+
+    
 
 
 def train():
@@ -340,5 +477,57 @@ def train():
     writer.close()
 
 
+from test import label2color
+def run_image(image_path, model):
+    from torchvision.transforms import ToTensor, Normalize
+    image = cv2.imread(image_path)
+    image1 = cv2.imread(image_path)
+    image1 = cv2.resize(image1,None,fx=0.2, fy=0.2, interpolation=cv2.INTER_CUBIC)
+    image1 = image1[205:-205,9:-10,:]
+
+    image = cv2.resize(image,None,fx=0.2, fy=0.2, interpolation=cv2.INTER_CUBIC)
+    image = image[205:-205,9:-10,:]
+
+    image = image[:,:,(2,1,0)]
+    image = ToTensor()(image)
+    
+    image = image.to(torch.device('cuda'))
+    image.unsqueeze_(0)
+    score = model(image)
+    predict = torch.argmax(score, 1).to(MyCPU, dtype=torch.uint8)[0].numpy()
+    color_label = label2color(predict)
+    # cv2.imwrite('image'+image_path, image1)
+    # cv2.imwrite('annot'+image_path, color_label)
+    return image1, color_label
+
+
+def real_image_test():
+    imgs = sorted([os.path.join("F:\\Images\\20191121\\", img) for img in os.listdir("F:\\Images\\20191121\\")])
+    if torch.cuda.is_available():
+        print('GPU')
+    resnet = resnet18(pretrained=True).to(torch.device('cuda'))
+    model = SwiftNet(resnet, num_classes=21)
+    model = model.to(torch.device('cuda'))
+    checkpoint = torch.load("checkpoints/CKPT/10.pth")
+    # print("Load",Config.ckpt_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    model = model.to(torch.device('cuda'))
+    for img in imgs:
+        image, label = run_image(img, model)
+        cv2.imshow("image",image)
+        cv2.imshow("label",label)
+        while cv2.waitKey(20)  & 0xFF != ord('p'):
+            pass
+    cv2.waitKey(0)
+
 if __name__ == '__main__':
-    final_eval()
+    # final_eval()
+    # all_eval()
+    train()
+    # real_image_test()
+
+
+    
+    
+    
