@@ -132,7 +132,7 @@ class MyTransform(object):
         dst_annot = self._transformer.transFromGray(annot, reuse=True)
 
         if self._FISH_SCALE:
-            image, annot = self._fish_scale(dst_image, dst_annot)
+            dst_image, dst_annot = self._fish_scale(dst_image, dst_annot)
             
         if self._NORMAL_TRANSLATE:
             x_shift = random.random()*(self._trans_range[1]-self._trans_range[0])+self._trans_range[0]
@@ -534,8 +534,6 @@ def run_image(image_path, model):
 
 def real_image_test():
     imgs = sorted([os.path.join("F:\\Images\\20191121\\", img) for img in os.listdir("F:\\Images\\20191121\\")])
-    if torch.cuda.is_available():
-        print('GPU')
     resnet = resnet18(pretrained=True).to(torch.device('cuda'))
     model = SwiftNet(resnet, num_classes=21)
     model = model.to(torch.device('cuda'))
