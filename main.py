@@ -45,8 +45,11 @@ class MyTransform(object):
         self._RAND_CROP = False
         self._rand_crop_rate = 0.8
 
-        self._NORMAL_SCALE = True
+        self._NORMAL_SCALE = False
         self._scale_range = [0.5, 2]
+
+        self._FISH_SCALE = True
+        self._fish_scale_range = [0.5, 2]
         self._NORMAL_TRANSLATE = True
         self._trans_range = [-20,20]
 
@@ -89,13 +92,37 @@ class MyTransform(object):
         crop_annot = annot[row_start:row_start+new_rows, col_start:col_start+new_cols]
 
         return crop_image, crop_annot
+    
+    def _fish_scale(self, image, annot):
+        borderValue = 20
+        rate = random.random()*(self._fish_scale_range[1]-self._fish_scale_range[0])+self._fish_scale_range[0]
+        if rate == 1:
+            return image, annot
+        rows, cols = annot.shape
+        image = cv2.resize(image, None,fx=rate,fy=rate)
+        annot = cv2.resize(annot, None,fx=rate,fy=rate, interpolation=cv2.INTER_NEAREST)
+        if rate <1:
+            dst_image = np.ones((rows,cols,3),dtype=np.uint8)*0
+            dst_annot = np.ones((rows,cols),dtype=np.uint8)*borderValue
+            row_start = rows//2-annot.shape[0]//2
+            col_start = cols//2-annot.shape[1]//2
+            dst_image[row_start:row_start+annot.shape[0], col_start:col_start+annot.shape[1]] = image
+            dst_annot[row_start:row_start+annot.shape[0], col_start:col_start+annot.shape[1]] = annot
+            return dst_image, dst_annot
+        if rate>1:
+            row_start = image.shape[0]//2-rows//2
+            col_start = image.shape[1]//2-cols//2
+            crop_image = image[row_start:row_start+rows, col_start:col_start+cols]
+            crop_annot = annot[row_start:row_start+rows, col_start:col_start+cols]
+            return crop_image, crop_annot
+
 
     def __call__(self, image, annot):
         if self._RAND_CROP:
             image, annot = self._rand_crop(image, annot)
             if self._NORMAL_SCALE:
                 scale_rate = random.random()*(self._scale_range[1]-self._scale_range[0])+self._scale_range[0]
-                image = cv2.resize(image, None, fx=scale_rate, fy=scale_rate, interpolation=cv2.INTER_CUBIC)
+                image = cv2.resize(image, None, fx=scale_rate, fy=scale_rate)
                 annot = cv2.resize(annot, None, fx=scale_rate, fy=scale_rate, interpolation=cv2.INTER_NEAREST)
         if self._F_RAND_FLAG:
             self._transformer.rand_f(self._F_RANGE)
@@ -104,6 +131,9 @@ class MyTransform(object):
         dst_image = self._transformer.transFromColor(image)
         dst_annot = self._transformer.transFromGray(annot, reuse=True)
 
+        if self._FISH_SCALE:
+            image, annot = self._fish_scale(dst_image, dst_annot)
+            
         if self._NORMAL_TRANSLATE:
             x_shift = random.random()*(self._trans_range[1]-self._trans_range[0])+self._trans_range[0]
             y_shift = random.random()*(self._trans_range[1]-self._trans_range[0])+self._trans_range[0]
@@ -111,6 +141,7 @@ class MyTransform(object):
             sz = (dst_annot.shape[1], dst_annot.shape[0])
             dst_image = cv2.warpAffine(dst_image, M, sz)
             dst_annot = cv2.warpAffine(dst_annot, M, sz, flags=cv2.INTER_NEAREST, borderValue=20)
+
 
         dst_image = Image.fromarray(dst_image)
         dst_annot = Image.fromarray(dst_annot)
@@ -508,7 +539,7 @@ def real_image_test():
     resnet = resnet18(pretrained=True).to(torch.device('cuda'))
     model = SwiftNet(resnet, num_classes=21)
     model = model.to(torch.device('cuda'))
-    checkpoint = torch.load("checkpoints/CKPT/10.pth")
+    checkpoint = torch.load("checkpoints/CKPT/14.pth")
     # print("Load",Config.ckpt_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -517,15 +548,20 @@ def real_image_test():
         image, label = run_image(img, model)
         cv2.imshow("image",image)
         cv2.imshow("label",label)
-        while cv2.waitKey(20)  & 0xFF != ord('p'):
-            pass
-    cv2.waitKey(0)
+        esc_flag = False
+        while True:
+            key = cv2.waitKey(20) & 0xFF
+            if key == 27:
+                esc_flag = True
+                return
+            elif key == ord('p'):
+                break
 
 if __name__ == '__main__':
     # final_eval()
     # all_eval()
-    train()
-    # real_image_test()
+    # train()
+    real_image_test()
 
 
     

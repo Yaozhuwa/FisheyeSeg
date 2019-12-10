@@ -2,6 +2,7 @@ import cv2
 import numpy as np 
 from data.FishEyeGenerator import FishEyeGenerator
 import time
+import random
 
 # image = cv2.imread("DataSets\\CityScape\\val_350f\\350frankfurt_000000_000294_leftImg8bit.png")
 # shape = image.shape
@@ -61,6 +62,37 @@ def test_trans():
 
     cv2.waitKey(0)
 
+def fish_scale(image, annot):
+    borderValue = 20
+    rate = random.random()*1.5+0.5
+    print(rate)
+    if rate == 1:
+        return image, annot
+    rows, cols = annot.shape
+    image = cv2.resize(image, None,fx=rate,fy=rate)
+    annot = cv2.resize(annot, None,fx=rate,fy=rate, interpolation=cv2.INTER_NEAREST)
+    if rate <1:
+        dst_image = np.ones((rows,cols,3),dtype=np.uint8)*0
+        dst_annot = np.ones((rows,cols),dtype=np.uint8)*borderValue
+        row_start = rows//2-annot.shape[0]//2
+        col_start = cols//2-annot.shape[1]//2
+        dst_image[row_start:row_start+annot.shape[0], col_start:col_start+annot.shape[1]] = image
+        dst_annot[row_start:row_start+annot.shape[0], col_start:col_start+annot.shape[1]] = annot
+        return dst_image, dst_annot
+    if rate>1:
+        row_start = image.shape[0]//2-rows//2
+        col_start = image.shape[1]//2-cols//2
+        crop_image = image[row_start:row_start+rows, col_start:col_start+cols]
+        crop_annot = annot[row_start:row_start+rows, col_start:col_start+cols]
+        return crop_image, crop_annot
+
+def test_scale():
+    img = cv2.imread('DataSets\\CityScape\\val_300f\\300frankfurt_000000_000294_leftImg8bit.png')
+    annot = cv2.imread('DataSets\\CityScape\\val_300f_annot\\300frankfurt_000000_000294_leftImg8bit.png', 0)
+    image, annot = fish_scale(img,annot)
+    cv2.imshow('image',image)
+    cv2.imshow('annot', annot*10)
+    cv2.waitKey(0)
 
 def test_rand_shift():
     _trans_range = [-200,200]
@@ -81,5 +113,6 @@ def test_rand_shift():
     cv2.waitKey(0)
 
 if __name__ == "__main__":
-    test_trans()
+    # test_trans()
     # test_color()
+    test_scale()
