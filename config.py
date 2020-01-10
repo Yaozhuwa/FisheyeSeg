@@ -1,4 +1,5 @@
 
+CKPT_DIR = "addxshift01"
 
 class DefaultConfig(object):
     data_dir = 'DataSets\\CityScape'
@@ -8,9 +9,9 @@ class DefaultConfig(object):
     valid_annot_dir='DataSets\\CityScape\\val_350f_annot'
 
     train_with_ckpt = False
-    logdir = "checkpoints/7DOF_SCALE_SHIFT"
-    ckpt_name = "checkpoints/7DOF_SCALE_SHIFT/ckpt_R7DoF"
-    model_path = "checkpoints/7DOF_SCALE_SHIFT/Model.pth"
+    logdir = "checkpoints/"+CKPT_DIR
+    ckpt_name = "checkpoints/"+CKPT_DIR+"/ckpt"
+    model_path = "checkpoints/"+CKPT_DIR+"/Model.pth"
     
     ckpt_path = "checkpoints/CKPT/6.pth"
 
@@ -21,13 +22,13 @@ class DefaultConfig(object):
     class_num = 21
 
     learning_rate = 4e-4
-    max_epoch = 240
+    max_epoch = 220
 
     crop = True
     crop_rate = 0.8
 
     rand_ext = True
-    ext_range = [15, 15, 15, 0.3, 0.1, 0.4]
+    ext_range = [0, 0, 0, 0.1, 0, 0]
     ext_param = [0, 0, 0, 0, 0, 0]
 
     rand_f = True

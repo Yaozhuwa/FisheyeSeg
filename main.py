@@ -48,9 +48,9 @@ class MyTransform(object):
         self._NORMAL_SCALE = False
         self._scale_range = [0.5, 2]
 
-        self._FISH_SCALE = True
+        self._FISH_SCALE = False
         self._fish_scale_range = [0.5, 2]
-        self._NORMAL_TRANSLATE = True
+        self._NORMAL_TRANSLATE = False
         self._trans_range = [-20,20]
 
     def set_crop(self,rand=True, rate=0.8):
@@ -130,9 +130,6 @@ class MyTransform(object):
             self._transformer.rand_ext_params()
         dst_image = self._transformer.transFromColor(image)
         dst_annot = self._transformer.transFromGray(annot, reuse=True)
-
-        if self._FISH_SCALE:
-            dst_image, dst_annot = self._fish_scale(dst_image, dst_annot)
             
         if self._NORMAL_TRANSLATE:
             x_shift = random.random()*(self._trans_range[1]-self._trans_range[0])+self._trans_range[0]
@@ -142,6 +139,148 @@ class MyTransform(object):
             dst_image = cv2.warpAffine(dst_image, M, sz)
             dst_annot = cv2.warpAffine(dst_annot, M, sz, flags=cv2.INTER_NEAREST, borderValue=20)
 
+        if self._FISH_SCALE:
+            dst_image, dst_annot = self._fish_scale(dst_image, dst_annot)
+
+
+        dst_image = Image.fromarray(dst_image)
+        dst_annot = Image.fromarray(dst_annot)
+        brightness, contrast, hue, saturation = 0.1, 0.1, 0.1, 0.1
+        dst_image = ColorJitter(brightness, contrast, saturation, hue)(dst_image)
+        if (random.random() < 0.5):
+            dst_image = dst_image.transpose(Image.FLIP_LEFT_RIGHT)
+            dst_annot = dst_annot.transpose(Image.FLIP_LEFT_RIGHT)
+
+        dst_annot = np.asarray(dst_annot)
+        dst_annot = torch.from_numpy(dst_annot)
+        dst_image = ToTensor()(dst_image)
+        # image = Normalize(mean=[.485, .456, .406], std=[.229, .224, .225])(image)
+
+        return dst_image, dst_annot
+
+class RandOneTransform(object):
+    def __init__(self, focal_len, shape=None):
+        self._transformer = FishEyeGenerator(focal_len, shape)
+        self.F = 350
+        self._F_RANGE = [200, 400]
+
+        self._EXT_PARAMS = [0, 0, 0, 0, 0, 0]
+        self._EXT_PARAM_RANGE = [0, 0, 0, 0, 0, 0]
+        self._transformer.set_ext_param_range(self._EXT_PARAM_RANGE)
+
+        self._RAND_CROP = False
+        self._rand_crop_rate = 0.8
+
+        self._NORMAL_SCALE = False
+        self._scale_range = [0.5, 2]
+
+        self._FISH_SCALE = True
+        self._fish_scale_range = [0.5, 2]
+        self._NORMAL_TRANSLATE = True
+        self._trans_range = [-20,20]
+
+    def set_crop(self,rand=True, rate=0.8):
+        self._RAND_CROP = rand
+        self._rand_crop_rate = rate
+
+    def set_bkg(self, bkg_label=20, bkg_color=[0, 0, 0]):
+        self._transformer.set_bkg(bkg_label, bkg_color)
+
+    def set_ext_param_range(self, ext_param):
+        self._EXT_PARAM_RANGE = list(ext_param)
+        self._transformer.set_ext_param_range(self._EXT_PARAM_RANGE)
+
+    def set_ext_params(self, ext_params):
+        self._EXT_PARAMS = ext_params.copy()
+        self._transformer.set_ext_params(ext_params)
+        # self._EXT_RAND_FLAG = False
+
+    def set_f(self, focal_len):
+        self.F = focal_len
+        self._transformer.set_f(focal_len)
+
+    def set_f_range(self, f_range=[200, 400]):
+        self._F_RANGE = f_range
+
+    def _rand_crop(self, image, annot):
+        rows, cols, channels = image.shape
+
+        new_rows = math.floor(rows*self._rand_crop_rate)
+        new_cols = math.floor(cols*self._rand_crop_rate)
+
+        row_start = math.floor((rows-new_rows)*random.random())
+        col_start = math.floor((cols-new_cols)*random.random())
+
+        crop_image = image[row_start:row_start+new_rows, col_start:col_start+new_cols]
+        crop_annot = annot[row_start:row_start+new_rows, col_start:col_start+new_cols]
+
+        return crop_image, crop_annot
+    
+    def _fish_scale(self, image, annot):
+        borderValue = 20
+        rate = random.random()*(self._fish_scale_range[1]-self._fish_scale_range[0])+self._fish_scale_range[0]
+        if rate == 1:
+            return image, annot
+        rows, cols = annot.shape
+        image = cv2.resize(image, None,fx=rate,fy=rate)
+        annot = cv2.resize(annot, None,fx=rate,fy=rate, interpolation=cv2.INTER_NEAREST)
+        if rate <1:
+            dst_image = np.ones((rows,cols,3),dtype=np.uint8)*0
+            dst_annot = np.ones((rows,cols),dtype=np.uint8)*borderValue
+            row_start = rows//2-annot.shape[0]//2
+            col_start = cols//2-annot.shape[1]//2
+            dst_image[row_start:row_start+annot.shape[0], col_start:col_start+annot.shape[1]] = image
+            dst_annot[row_start:row_start+annot.shape[0], col_start:col_start+annot.shape[1]] = annot
+            return dst_image, dst_annot
+        if rate>1:
+            row_start = image.shape[0]//2-rows//2
+            col_start = image.shape[1]//2-cols//2
+            crop_image = image[row_start:row_start+rows, col_start:col_start+cols]
+            crop_annot = annot[row_start:row_start+rows, col_start:col_start+cols]
+            return crop_image, crop_annot
+
+
+    def __call__(self, image, annot):
+        if self._RAND_CROP:
+            image, annot = self._rand_crop(image, annot)
+            if self._NORMAL_SCALE:
+                scale_rate = random.random()*(self._scale_range[1]-self._scale_range[0])+self._scale_range[0]
+                image = cv2.resize(image, None, fx=scale_rate, fy=scale_rate)
+                annot = cv2.resize(annot, None, fx=scale_rate, fy=scale_rate, interpolation=cv2.INTER_NEAREST)
+
+        # index = random.randint(0,2)
+
+        # if index==0:
+        #     self._transformer.rand_f(self._F_RANGE)
+        #     self._transformer.set_ext_params(self._EXT_PARAMS)
+        # elif index==1:
+        #     # 随机旋转
+        #     self._transformer.set_f(self.F)
+        #     the_ex_range = self._EXT_PARAM_RANGE.copy()
+        #     the_ex_range[3:] = [0,0,0]
+        #     self._transformer.set_ext_param_range(the_ex_range)
+        #     self._transformer.rand_ext_params()
+        # elif index==2:
+        #     # 随机平移
+        #     self._transformer.set_f(self.F)
+        #     the_ex_range = self._EXT_PARAM_RANGE.copy()
+        #     the_ex_range[:3] = [0,0,0]
+        #     self._transformer.set_ext_param_range(the_ex_range)
+        #     self._transformer.rand_ext_params()
+    
+        dst_image = self._transformer.transFromColor(image)
+        dst_annot = self._transformer.transFromGray(annot, reuse=True)
+            
+        if self._NORMAL_TRANSLATE:
+            x_shift = random.random()*(self._trans_range[1]-self._trans_range[0])+self._trans_range[0]
+            y_shift = random.random()*(self._trans_range[1]-self._trans_range[0])+self._trans_range[0]
+            M=np.array([[1,0, x_shift],[0,1,y_shift]], dtype=np.float32)
+            sz = (dst_annot.shape[1], dst_annot.shape[0])
+            dst_image = cv2.warpAffine(dst_image, M, sz)
+            dst_annot = cv2.warpAffine(dst_annot, M, sz, flags=cv2.INTER_NEAREST, borderValue=20)
+
+        if self._FISH_SCALE:
+            dst_image, dst_annot = self._fish_scale(dst_image, dst_annot)
 
         dst_image = Image.fromarray(dst_image)
         dst_annot = Image.fromarray(dst_annot)
@@ -387,6 +526,13 @@ def train():
     train_transform.set_bkg(bkg_label=20, bkg_color=[0, 0, 0])
     train_transform.set_crop(rand=Config.crop, rate=Config.crop_rate)
 
+    # train_transform = RandOneTransform(Config.f, Config.fish_size)
+    # train_transform.set_ext_params(Config.ext_param)
+    # train_transform.set_ext_param_range(Config.ext_range)
+    # train_transform.set_f_range(Config.f_range)
+    # train_transform.set_bkg(bkg_label=20, bkg_color=[0, 0, 0])
+    # train_transform.set_crop(rand=Config.crop, rate=Config.crop_rate)
+
     train_set = CityScape(Config.train_img_dir,
                           Config.train_annot_dir, transform=train_transform)
     train_loader = DataLoader(train_set, batch_size=Config.batch_size, shuffle=True,
@@ -537,7 +683,7 @@ def real_image_test():
     resnet = resnet18(pretrained=True).to(torch.device('cuda'))
     model = SwiftNet(resnet, num_classes=21)
     model = model.to(torch.device('cuda'))
-    checkpoint = torch.load("checkpoints/CKPT/14.pth")
+    checkpoint = torch.load("checkpoints/CKPT/16.pth")
     # print("Load",Config.ckpt_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
@@ -558,8 +704,8 @@ def real_image_test():
 if __name__ == '__main__':
     # final_eval()
     # all_eval()
-    # train()
-    real_image_test()
+    train()
+    # real_image_test()
 
 
     
