@@ -503,14 +503,15 @@ def one_eval(model, ckpt_path, valid_path, valid_annot_path, is_distortion=False
 def all_eval():
     resnet = resnet18(pretrained=True)
     model = SwiftNet(resnet, num_classes=21)
-    ckpt_index = [7]
+    ckpt_index = [x for x in range(22, 26)]
     # ckpt_index = [1, 4, 5, 6, 8, 9, 10, 11]
     ckpt = ["checkpoints/CKPT/"+str(x)+'.pth' for x in ckpt_index]
-    valid_path = ['\\val_400f']
+    # valid_path = ['\\val_400f']
     # valid_path = ['\\val_200f','\\val_250f','\\val_300f','\\val_350f','\\val_400f','\\val_7DOF', '\\val_rotate10']
+    valid_path = ['\\val_200f','\\val_250f','\\val_300f','\\val_350f','\\val_400f']
     for i in ckpt:
         for j in valid_path:
-            one_eval(model, i, j, j+"_annot", is_distortion=False)
+            one_eval(model, i, j, j+"_annot", is_distortion=True)
 
     
 
@@ -659,12 +660,7 @@ def run_image(image_path, model):
     from torchvision.transforms import ToTensor, Normalize
     image = cv2.imread(image_path)
     image1 = cv2.imread(image_path)
-    image1 = cv2.resize(image1,None,fx=0.2, fy=0.2, interpolation=cv2.INTER_CUBIC)
-    image1 = image1[205:-205,9:-10,:]
-
-    image = cv2.resize(image,None,fx=0.2, fy=0.2, interpolation=cv2.INTER_CUBIC)
-    image = image[205:-205,9:-10,:]
-
+    
     image = image[:,:,(2,1,0)]
     image = ToTensor()(image)
     
@@ -679,7 +675,7 @@ def run_image(image_path, model):
 
 
 def real_image_test():
-    imgs = sorted([os.path.join("F:\\Images\\20191121\\", img) for img in os.listdir("F:\\Images\\20191121\\")])
+    imgs = sorted([os.path.join("D:\\DataSets\\MyFishData\\0119_image\\", img) for img in os.listdir("D:\\DataSets\\MyFishData\\0119_image\\")])
     resnet = resnet18(pretrained=True).to(torch.device('cuda'))
     model = SwiftNet(resnet, num_classes=21)
     model = model.to(torch.device('cuda'))
@@ -704,8 +700,8 @@ def real_image_test():
 if __name__ == '__main__':
     # final_eval()
     # all_eval()
-    train()
-    # real_image_test()
+    # train()
+    real_image_test()
 
 
     

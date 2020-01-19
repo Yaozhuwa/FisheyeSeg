@@ -1,5 +1,5 @@
 
-CKPT_DIR = "addxshift01"
+CKPT_DIR = "addxshift07"
 
 class DefaultConfig(object):
     data_dir = 'DataSets\\CityScape'
@@ -28,7 +28,7 @@ class DefaultConfig(object):
     crop_rate = 0.8
 
     rand_ext = True
-    ext_range = [0, 0, 0, 0.1, 0, 0]
+    ext_range = [0, 0, 0, 0.7, 0, 0]
     ext_param = [0, 0, 0, 0, 0, 0]
 
     rand_f = True

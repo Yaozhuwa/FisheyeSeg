@@ -247,11 +247,11 @@ class FishEyeGenerator:
 
 
 def test_color():
-    trans = FishEyeGenerator(200, [640,640])
+    trans = FishEyeGenerator(300, [640,640])
     img = cv2.imread("C:\\Users\\yyz\\Desktop\\1train.png")
     # im_annot = cv2.imread("F:/Code/Github/FisheyeSeg/annot.png", 0)
     # img = cv2.resize(img,None,fx=0.25, fy=0.25)
-    trans.set_ext_params([0, 0, 0, 0, 0, 0])
+    trans.set_ext_params([0, 0, 0, 0, 0, -1])
     # trans.rand_ext_params()
     trans.print_ext_param()
     s = time.time()
@@ -265,7 +265,7 @@ def test_color():
     cv2.imshow("dst",dst)
     # cv2.imshow("dst2",dst2*10)
 
-    # cv2.waitKey(0)
+    cv2.waitKey(0)
 
 
 def test_gray():
